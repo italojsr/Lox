@@ -1,10 +1,12 @@
-package br.ufma
+package br.ufma;
 
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import br.ufma.TokenType.*;
 
 
 class Scanner {
@@ -17,22 +19,25 @@ class Scanner {
   Scanner(String source) {
     this.source = source;
   }
-}
 
-List<Token> scanTokens() {
+  List<Token> scanTokens() {
     while (!isAtEnd()) {
         // We are at the beginning of the next lexeme.
         start = current;
         scanToken();
     }
 
-    tokens.add(new Token(EOF, "", null, line));
+    tokens.add(new Token(TokenType.EOF, "", null, line));
     return tokens;
+  }
+
+  private boolean isAtEnd() {
+      return current >= source.length();
+  }
+
 }
 
-private boolean isAtEnd() {
-    return current >= source.length();
-}
+
 
 
 
