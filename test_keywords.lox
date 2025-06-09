@@ -1,0 +1,10 @@
+// test_keywords.lox
+var idade = 30;
+if (idade > 25) {
+    print "Adulto";
+} else {
+    print "Jovem";
+}
+fun saudacao() {
+    return "Olá";
+}
