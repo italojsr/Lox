@@ -4,27 +4,24 @@ package br.ufma;
 import br.ufma.Expr;
 import br.ufma.Token;
 import br.ufma.TokenType; // Para usar os tipos de token nas operações
-
+import java.util.List;
 // A classe Interpreter implementa a interface Expr.Visitor<Object>.
 // O tipo de retorno 'Object' permite que os métodos visit retornem
 // qualquer tipo de valor Lox (número, string, booleano, nil).
-public class Interpreter implements Expr.Visitor<Object> {
+public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
 
     // O método principal para iniciar a interpretação de uma expressão.
     // Ele "aceita" o interpretador como um visitante para iniciar o processo.
     // Este método agora é público para ser chamado de fora, por exemplo, pelo Lox.main
     public Object interpret(Expr expression) {
-        try {
-            Object value = evaluate(expression);
-            // Por enquanto, imprimimos o resultado. No futuro, isso pode ser opcional
-            // ou controlado por uma declaração 'print'.
-            System.out.println(stringify(value));
-            return value;
-        } catch (RuntimeError error) {
-            // Se ocorrer um erro durante a execução (runtime error),
-            // Lox.runtimeError é chamado para reportá-lo.
-            br.ufma.Lox.runtimeError(error);
-            return null; // Retorna null em caso de erro de execução
+        void interpret(List<Stmt> statements) {
+            try {
+            for (Stmt statement : statements) {
+                execute(statement);
+            }
+            } catch (RuntimeError error) {
+            Lox.runtimeError(error);
+            }
         }
     }
 
@@ -33,6 +30,27 @@ public class Interpreter implements Expr.Visitor<Object> {
     private Object evaluate(Expr expr) {
         return expr.accept(this);
     }
+
+    private void execute(Stmt stmt) {
+    stmt.accept(this);
+    }
+
+
+    @Override
+    public Void visitExpressionStmt(Stmt.Expression stmt) {
+        evaluate(stmt.expression);
+        return null;
+    }
+
+
+    @Override
+    public Void visitPrintStmt(Stmt.Print stmt) {
+        Object value = evaluate(stmt.expression);
+        System.out.println(stringify(value));
+        return null;
+    }
+
+    
 
     // Método auxiliar para converter o valor do Lox para uma string legível.
     private String stringify(Object object) {
