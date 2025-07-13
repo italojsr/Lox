@@ -51,17 +51,29 @@ public class Lox {
     }
 
     private static void run(String source) {
-        Scanner scanner = new Scanner(source);
-        List<Token> tokens = scanner.scanTokens();
         Parser parser = new Parser(tokens);
-        List<Stmt> statements = parser.parse();
-        
+        Expr expression = parser.parse();
 
         // Stop if there was a syntax error.
         if (hadError) return;
-        
-        interpreter.interpret(statements);
 
+        interpreter.interpret(expression);
+
+        // TEMP: Apenas para ver os tokens. Será substituído pelo Parser.
+        // for (Token token : tokens) {
+        //     System.out.println(token);
+        // }
+
+        // *** FUTURAMENTE: Aqui virá a chamada para o Parser ***
+        // Por enquanto, para testar o Interpreter, vamos criar uma AST manual ou usar o AstPrinter
+        // Esta parte será substituída pelo Parser.parse() em breve.
+        // Para testar o Interpreter agora, podemos usar o AstPrinter.main para ver como a avaliação funciona.
+        // Mas para o Lox.run, precisamos de uma expressão. Vamos fazer um placeholder.
+
+        // Remova os for loops de tokens se você já os tiver.
+        // Por agora, Lox.java não pode interpretar automaticamente sem um Parser.
+        // O teste do Interpreter será via AstPrinter.main ou manualmente.
+        // O objetivo dessa etapa é o Interpreter em si, não a integração completa ainda.
     }
 
     static void error(int line, String message) {

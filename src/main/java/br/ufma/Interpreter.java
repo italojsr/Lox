@@ -4,64 +4,35 @@ package br.ufma;
 import br.ufma.Expr;
 import br.ufma.Token;
 import br.ufma.TokenType; // Para usar os tipos de token nas operações
-import java.util.List;
+
 // A classe Interpreter implementa a interface Expr.Visitor<Object>.
 // O tipo de retorno 'Object' permite que os métodos visit retornem
 // qualquer tipo de valor Lox (número, string, booleano, nil).
-public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
-    private Environment environment = new Environment();
+public class Interpreter implements Expr.Visitor<Object> {
+
     // O método principal para iniciar a interpretação de uma expressão.
     // Ele "aceita" o interpretador como um visitante para iniciar o processo.
     // Este método agora é público para ser chamado de fora, por exemplo, pelo Lox.main
-
-    void interpret(List<Stmt> statements) {
+    public Object interpret(Expr expression) {
         try {
-        for (Stmt statement : statements) {
-            execute(statement);
-        }
+            Object value = evaluate(expression);
+            // Por enquanto, imprimimos o resultado. No futuro, isso pode ser opcional
+            // ou controlado por uma declaração 'print'.
+            System.out.println(stringify(value));
+            return value;
         } catch (RuntimeError error) {
-        Lox.runtimeError(error);
+            // Se ocorrer um erro durante a execução (runtime error),
+            // Lox.runtimeError é chamado para reportá-lo.
+            br.ufma.Lox.runtimeError(error);
+            return null; // Retorna null em caso de erro de execução
         }
     }
-    
 
     // Método auxiliar para avaliar uma sub-expressão.
     // É aqui que o padrão Visitor entra em jogo para cada nó da AST.
     private Object evaluate(Expr expr) {
         return expr.accept(this);
     }
-
-    private void execute(Stmt stmt) {
-    stmt.accept(this);
-    }
-
-
-    @Override
-    public Void visitExpressionStmt(Stmt.Expression stmt) {
-        evaluate(stmt.expression);
-        return null;
-    }
-
-
-    @Override
-    public Void visitPrintStmt(Stmt.Print stmt) {
-        Object value = evaluate(stmt.expression);
-        System.out.println(stringify(value));
-        return null;
-    }
-
-    @Override
-    public Void visitVarStmt(Stmt.Var stmt) {
-        Object value = null;
-        if (stmt.initializer != null) {
-        value = evaluate(stmt.initializer);
-        }
-
-        environment.define(stmt.name.lexeme, value);
-        return null;
-    }
-
-    
 
     // Método auxiliar para converter o valor do Lox para uma string legível.
     private String stringify(Object object) {
@@ -115,13 +86,6 @@ public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
         // Não deveria ser alcançado (o parser garante isso).
         return null;
     }
-
-    @Override
-    public Object visitVariableExpr(Expr.Variable expr) {
-        return environment.get(expr.name);
-    }
-
-    
 
     @Override
     public Object visitBinaryExpr(Expr.Binary expr) {
