@@ -1,0 +1,156 @@
+[33mcommit 1f53a0edc99be45db9f68334394331fec710cf6f[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jul 13 19:42:09 2025 -0300
+
+    Adicionando seção 8.3
+
+[33mcommit 5606c6cd8d8d503270b7e6a7bc863e18c085403a[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jul 13 19:34:44 2025 -0300
+
+    Seção 8.2
+
+[33mcommit ff9c136e9a38ae16712cc5eaed722c1e8a249963[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jul 13 19:15:04 2025 -0300
+
+    Adicionando subseção 8.1
+
+[33mcommit cdc4e462d1b108ffd6f4ff59742bea926778519d[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jul 13 08:21:42 2025 -0300
+
+    corrigindo função run Seção 6 e Adicionando implementação da 7
+
+[33mcommit 23e20dcbda7a6b623174dd2db71cd3d5471016c8[m
+Author: Hudson Costa <118493676+Hudson390@users.noreply.github.com>
+Date:   Wed Jul 2 08:28:49 2025 -0300
+
+    Update README.md
+
+[33mcommit e24df06a3a063fdb9f9db1674773e858816b034d[m
+Author: Hudson Costa <118493676+Hudson390@users.noreply.github.com>
+Date:   Wed Jul 2 08:26:25 2025 -0300
+
+    Implementar avaliação de expressões (Seção 7)
+
+[33mcommit 0ed70737fab5913ca12827c5b5d1c9603ee93fb3[m
+Author: Hudson Costa <118493676+Hudson390@users.noreply.github.com>
+Date:   Wed Jul 2 08:22:29 2025 -0300
+
+    Implementar avaliação de expressões (Seção 7)
+
+[33mcommit df84166d90b9c868f0cb8d89da669e4874e4d0dd[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jun 22 12:38:49 2025 -0300
+
+    Adicionando métodos da Seção 6.4
+
+[33mcommit b1edcd3cd49bb95c6408fabebdadb0873934e642[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jun 22 12:28:32 2025 -0300
+
+    .
+
+[33mcommit fe19549e54254f78c9989e6d00d9ee2b3e24a8f5[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jun 22 12:26:16 2025 -0300
+
+    Corrigindo métodos da seção 6.3
+
+[33mcommit 5d0dbce320373119601238eb882e9e674d152dc1[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jun 22 12:25:36 2025 -0300
+
+    Adicionando método error para localizar erros em tokens
+
+[33mcommit 9d071a8ade929f3d983ef5ede8515a32e35003ad[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sun Jun 22 12:10:46 2025 -0300
+
+    Seção 6.2 e 6.3
+
+[33mcommit 21cad709d3cc9e794deed7b82a8047de63e49e1a[m
+Author: Hudson <hudsoncdiniz@gmail.com>
+Date:   Sat Jun 14 18:39:54 2025 -0300
+
+    feat(ast): Implementar AST e padrão Visitor (Seção 5) e atualizar README
+
+[33mcommit e169e8fcf328be64c540762a152c2d37e4c026eb[m
+Author: Hudson <hudsoncdiniz@gmail.com>
+Date:   Sat Jun 14 18:35:34 2025 -0300
+
+    feat(ast): Definir estrutura base da AST com Expr e Visitor
+
+[33mcommit e09b9c2edc18eaf2547a0db4a57669147ffba7a3[m
+Merge: 94f57ee 78d62ac
+Author: Hudson <hudsoncdiniz@gmail.com>
+Date:   Sat Jun 14 18:10:20 2025 -0300
+
+    Create Class Expr
+
+[33mcommit 94f57ee33e9ceccd6f0af14a5b3a3c8f187d7718[m
+Author: Hudson <hudsoncdiniz@gmail.com>
+Date:   Sat Jun 14 18:03:24 2025 -0300
+
+    Create Class Expr
+
+[33mcommit 78d62acc5e399b19eacb5208ff83c25ef830dc89[m
+Author: Hudson Costa <118493676+Hudson390@users.noreply.github.com>
+Date:   Mon Jun 9 08:17:50 2025 -0300
+
+    Update README.md
+
+[33mcommit c97a8afd52a9d73bd91f504c039eb178786a381e[m
+Author: Hudson Costa <hudsoncdiniz@gmail.com>
+Date:   Mon Jun 9 08:08:55 2025 -0300
+
+    feat: Implementar Scanner (até 4.7)
+
+[33mcommit 84be8b6d17ee5f92ae18c2823230334fc4da1061[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Mon Jun 9 06:59:29 2025 -0300
+
+    Adicionando seção 4.5
+
+[33mcommit 1e28a2363fb6644bc49563cd3b0af5de38a83943[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Mon Jun 9 06:50:56 2025 -0300
+
+    Corrigindo EOF na classe Scanner (4.4)
+
+[33mcommit 550d4c6666890c2a24bfd3c4e46818703e616482[m
+Author: Hudson Costa <118493676+Hudson390@users.noreply.github.com>
+Date:   Mon Jun 2 16:06:21 2025 -0300
+
+    Update README.md
+
+[33mcommit 42341900b4044fdfdf6e532ce8188b75d8c5b804[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Mon Jun 2 06:52:42 2025 -0300
+
+    Adicionando seção 4.3 e 4.4
+
+[33mcommit 50772a33a5a54f7a7e60693c9879b6a4182558b4[m
+Author: Hudson <hudsoncdiniz@gmail.com>
+Date:   Sat May 31 10:06:19 2025 -0300
+
+    The Interpreter Framework
+
+[33mcommit a05b43c3f94ddc2ade1df3f5dd0aa6f4f1269f62[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sat May 31 07:29:01 2025 -0300
+
+    .
+
+[33mcommit 69ad2f37b9b510877e7b24a9d038ab973d450e7d[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sat May 31 07:26:31 2025 -0300
+
+    Atualizando  README
+
+[33mcommit 2bff99fc1cf31a04a233d1f4ce23d4f687366df1[m
+Author: italojsr <italoreis99@gmail.com>
+Date:   Sat May 31 07:23:27 2025 -0300
+
+    first commit
