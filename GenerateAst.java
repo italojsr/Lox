@@ -15,17 +15,21 @@ public class GenerateAst {
 
         // Define os tipos de AST que queremos gerar.
         // Cada string representa o nome da classe e seus campos.
+        defineAst(outputDir, "Stmt", Arrays.asList(
+                 "Expression : Expr expression",
+                 "Print      : Expr expression",
+                 "Var        : Token name, Expr initializer"
+                 
+        ));
         defineAst(outputDir, "Expr", Arrays.asList(
                 "Binary   : Expr left, Token operator, Expr right",
                 "Grouping : Expr expression",
                 "Literal  : Object value",
-                "Unary    : Token operator, Expr right"
+                "Unary    : Token operator, Expr right",
+                "Variable : Token name"
         // Adicionaremos mais tipos de expressão aqui em futuras etapas
         ));
-        defineAst(outputDir, "Stmt", Arrays.asList(
-                 "Expression : Expr expression",
-                 "Print      : Expr expression"
-        ));        
+        
     }
 
     private static void defineAst(
