@@ -9,21 +9,21 @@ import java.util.List;
 // O tipo de retorno 'Object' permite que os métodos visit retornem
 // qualquer tipo de valor Lox (número, string, booleano, nil).
 public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
-
+    private Environment environment = new Environment();
     // O método principal para iniciar a interpretação de uma expressão.
     // Ele "aceita" o interpretador como um visitante para iniciar o processo.
     // Este método agora é público para ser chamado de fora, por exemplo, pelo Lox.main
-    public Object interpret(Expr expression) {
-        void interpret(List<Stmt> statements) {
-            try {
-            for (Stmt statement : statements) {
-                execute(statement);
-            }
-            } catch (RuntimeError error) {
-            Lox.runtimeError(error);
-            }
+
+    void interpret(List<Stmt> statements) {
+        try {
+        for (Stmt statement : statements) {
+            execute(statement);
+        }
+        } catch (RuntimeError error) {
+        Lox.runtimeError(error);
         }
     }
+    
 
     // Método auxiliar para avaliar uma sub-expressão.
     // É aqui que o padrão Visitor entra em jogo para cada nó da AST.
@@ -47,6 +47,17 @@ public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
     public Void visitPrintStmt(Stmt.Print stmt) {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
+        return null;
+    }
+
+    @Override
+    public Void visitVarStmt(Stmt.Var stmt) {
+        Object value = null;
+        if (stmt.initializer != null) {
+        value = evaluate(stmt.initializer);
+        }
+
+        environment.define(stmt.name.lexeme, value);
         return null;
     }
 
@@ -104,6 +115,13 @@ public class Interpreter implements Expr.Visitor<Object>,Smtm.Visitor<Void> {
         // Não deveria ser alcançado (o parser garante isso).
         return null;
     }
+
+    @Override
+    public Object visitVariableExpr(Expr.Variable expr) {
+        return environment.get(expr.name);
+    }
+
+    
 
     @Override
     public Object visitBinaryExpr(Expr.Binary expr) {
