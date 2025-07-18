@@ -1,4 +1,3 @@
-// src/main/java/br/ufma/Parser.java
 
 package br.ufma;
 
@@ -26,16 +25,21 @@ public class Parser {
     public List<Stmt> parse() {
         List<Stmt> statements = new ArrayList<>();
         while (!isAtEnd()) {
-            statements.add(declaration()); // Lox é uma sequência de declarações
+            Stmt statement = declaration(); // Lox é uma sequência de declarações
+            if (statement != null) { // Adicionado para lidar com declarações que retornam null em caso de erro.
+                statements.add(statement);
+            }
         }
         return statements;
     }
 
     // --- Regras de Parsing (do mais alto para o mais baixo na precedência) ---
 
-    // Regra para uma declaração (statement ou var declaration)
+    // Regra para uma declaração (statement, var, ou fun declaration)
     private Stmt declaration() {
         try {
+            if (match(FUN))
+                return function("function"); // fun declaration
             if (match(VAR))
                 return varDeclaration(); // var declaration
             return statement(); // outras declarações
@@ -58,23 +62,22 @@ public class Parser {
         return new Stmt.Var(name, initializer);
     }
 
-    // Regra para uma instrução (statement)
-    private Stmt statement() {
-        if (match(PRINT))
-            return printStatement(); // print statement
-        if (match(LEFT_BRACE))
-            return new Stmt.Block(block()); // block statement
-        if (match(IF))
-            return ifStatement(); // if statement
-
-        return expressionStatement(); // expresssion statement
-    }
-
     // Regra para a declaração 'print'
     private Stmt printStatement() {
         Expr value = expression(); // 'print' espera uma expressão
         consume(SEMICOLON, "Expect ';' after value.");
         return new Stmt.Print(value);
+    }
+
+    // Regra para a declaração 'return'
+    private Stmt returnStatement() {
+        Token keyword = previous(); // Pega o token 'return'
+        Expr value = null;
+        if (!check(SEMICOLON)) { // Se não houver ';' imediatamente, há um valor de retorno
+            value = expression();
+        }
+        consume(SEMICOLON, "Expect ';' after return value.");
+        return new Stmt.Return(keyword, value);
     }
 
     // Regra para a declaração 'if'
@@ -102,6 +105,42 @@ public class Parser {
 
         consume(RIGHT_BRACE, "Expect '}' after block.");
         return statements;
+    }
+
+    // Regra para uma instrução (statement)
+    private Stmt statement() {
+        if (match(PRINT))
+            return printStatement();
+        if (match(RETURN))
+            return returnStatement();
+        if (match(LEFT_BRACE))
+            return new Stmt.Block(block());
+        if (match(IF))
+            return ifStatement();
+
+        return expressionStatement(); // expresssion statement
+    }
+
+    // Regra para declarações de função (fun name(params) { body })
+    // 'kind' pode ser "function" ou "method" (para uso futuro com classes)
+    private Stmt.Function function(String kind) {
+        Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
+
+        consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+        List<Token> parameters = new ArrayList<>();
+        if (!check(RIGHT_PAREN)) { // Se não for um ')' imediato, há parâmetros
+            do {
+                if (parameters.size() >= 255) { // Lox tem limite de 255 parâmetros
+                    error(peek(), "Can't have more than 255 parameters.");
+                }
+                parameters.add(consume(IDENTIFIER, "Expect parameter name."));
+            } while (match(COMMA)); // Continua enquanto houver ','
+        }
+        consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+        consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+        List<Stmt> body = block(); // O corpo da função é um bloco de statements
+        return new Stmt.Function(name, parameters, body);
     }
 
     // Regra para uma expressão seguida de ponto e vírgula (e.g., '1 + 2;')
@@ -219,13 +258,17 @@ public class Parser {
         return call(); // Chama a regra para chamadas de função
     }
 
-    // Regra para chamadas de função (ainda um stub, mas adicionado à hierarquia)
+    // Regra para chamadas de função e acesso a propriedades (e.g., obj.prop,
+    // obj.method())
     private Expr call() {
-        Expr expr = primary(); // Uma chamada começa com uma expressão primária (e.g., identificador de função)
+        Expr expr = primary();
 
         while (true) {
-            if (match(LEFT_PAREN)) {
-                expr = finishCall(expr); // Se encontrar '(', é uma chamada de função
+            if (match(LEFT_PAREN)) { // Se encontrar '(', é uma chamada de função
+                expr = finishCall(expr);
+            } else if (match(DOT)) { // Se encontrar '.', é acesso a propriedade/método
+                Token name = consume(IDENTIFIER, "Expect property name after '.'.");
+                expr = new Expr.Get(expr, name);
             } else {
                 break;
             }
@@ -248,7 +291,8 @@ public class Parser {
         return new Expr.Call(callee, paren, arguments);
     }
 
-    // Regra para expressões primárias (literais, agrupamentos, variáveis)
+    // Regra para expressões primárias (literais, agrupamentos, variáveis, this,
+    // super)
     private Expr primary() {
         if (match(FALSE))
             return new Expr.Literal(false);
@@ -264,6 +308,15 @@ public class Parser {
 
         if (match(IDENTIFIER)) { // Variáveis
             return new Expr.Variable(previous());
+        }
+
+        if (match(THIS))
+            return new Expr.This(previous()); // 'this' keyword (futuro)
+        if (match(SUPER)) { // 'super' keyword (futuro)
+            Token keyword = previous();
+            consume(DOT, "Expect '.' after 'super'.");
+            Token method = consume(IDENTIFIER, "Expect superclass method name.");
+            return new Expr.Super(keyword, method);
         }
 
         if (match(LEFT_PAREN)) {
@@ -351,7 +404,7 @@ public class Parser {
                 case RETURN:
                     return; // Palavras-chave que indicam o início de uma nova declaração.
             }
-            advance(); // Descartar mais um token
+            advance(); // Descarta mais um token
         }
     }
 }

@@ -1,5 +1,3 @@
-// src/main/java/br/ufma/Lox.java
-
 package br.ufma;
 
 import java.io.BufferedReader;
@@ -21,7 +19,7 @@ public class Lox {
 
     public static void main(String[] args) throws IOException {
         if (args.length > 1) {
-            // System.out.println("Usage: jlox [script]");
+            System.out.println("Usage: jlox [script]");
             System.exit(64); // Código de saída para erro de uso
         } else if (args.length == 1) { // Quando um arquivo é passado como argumento
             runFile(args[0]); // Executa o arquivo
@@ -66,24 +64,26 @@ public class Lox {
 
     // O método central que orquestra a análise léxica, sintática e a interpretação
     private static void run(String source) {
-        //System.out.println("DEBUG: Lox.run - Source: '" + source + "'"); // DEBUG
-        //System.out.println("DEBUG: Lox.run - hadError (before scan): " + hadError); // DEBUG
-
         // 1. Análise Léxica (Scanning): Transforma o código fonte em uma lista de
         // tokens
         Scanner scanner = new Scanner(source);
         List<Token> tokens = scanner.scanTokens();
 
+        // Se o scanner encontrar um erro, a execução é interrompida
+        if (hadError)
+            return;
 
         // 2. Análise Sintática (Parsing): Transforma a lista de tokens em uma Árvore
         // Sintática Abstrata (AST)
         Parser parser = new Parser(tokens);
         List<Stmt> statements = parser.parse(); // O parser retorna uma lista de declarações (Stmt)
 
+        // Se o parser encontrar um erro, a execução é interrompida
+        if (hadError)
+            return;
 
         // 3. Interpretação: Percorre a AST e executa o código Lox
         interpreter.interpret(statements);
-        //System.out.println("DEBUG: Lox.run - Interpretation finished."); // DEBUG
     }
 
     // Reporta um erro de análise léxica ou sintática

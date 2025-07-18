@@ -1,4 +1,3 @@
-// src/main/java/br/ufma/Expr.java
 package br.ufma;
 
 import br.ufma.Token;

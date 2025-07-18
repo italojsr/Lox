@@ -1,8 +1,11 @@
-// src/main/java/br/ufma/Interpreter.java
 package br.ufma;
 
+import br.ufma.Expr;
+import br.ufma.Stmt;
+import br.ufma.Token;
+import br.ufma.TokenType;
 import java.util.List;
-import java.util.Arrays; // Import necessário para Arrays.asList no main
+import java.util.ArrayList; // Adicionado para visitCallExpr
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
@@ -57,6 +60,15 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Void visitFunctionStmt(Stmt.Function stmt) {
+        // Quando uma função é declarada, ela é "empacotada" em um objeto LoxFunction.
+        // O 'closure' é o ambiente onde a função foi *definida*.
+        LoxFunction function = new LoxFunction(stmt, environment);
+        environment.define(stmt.name.lexeme, function); // Define a função no ambiente atual
+        return null;
+    }
+
+    @Override
     public Void visitIfStmt(Stmt.If stmt) {
         if (isTruthy(evaluate(stmt.condition))) {
             execute(stmt.thenBranch);
@@ -71,6 +83,15 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
         return null;
+    }
+
+    @Override
+    public Void visitReturnStmt(Stmt.Return stmt) {
+        Object value = null;
+        if (stmt.value != null) { // Se há um valor de retorno
+            value = evaluate(stmt.value);
+        }
+        throw new Return(value); // Lança a exceção de controle de fluxo
     }
 
     @Override
@@ -145,8 +166,33 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visitCallExpr(Expr.Call expr) {
-        // Esta implementação é um stub; a funcionalidade de chamada real vem mais tarde
-        throw new RuntimeError(expr.paren, "Not yet implemented: function calls.");
+        // Avalia a expressão que representa o 'callee' (geralmente um Expr.Variable ou
+        // Expr.Get)
+        Object callee = evaluate(expr.callee);
+
+        // Avalia cada argumento
+        List<Object> arguments = new ArrayList<>();
+        for (Expr argument : expr.arguments) {
+            arguments.add(evaluate(argument));
+        }
+
+        // Verifica se o 'callee' é realmente chamável (implementa LoxCallable)
+        if (!(callee instanceof LoxCallable)) {
+            throw new RuntimeError(expr.paren,
+                    "Can only call functions and classes.");
+        }
+
+        LoxCallable function = (LoxCallable) callee;
+
+        // Verifica a aridade (número de argumentos esperados vs. passados)
+        if (arguments.size() != function.arity()) {
+            throw new RuntimeError(expr.paren, "Expected " +
+                    function.arity() + " arguments but got " +
+                    arguments.size() + ".");
+        }
+
+        // Chama a função
+        return function.call(this, arguments);
     }
 
     @Override
@@ -279,172 +325,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     // O método main para testar o Interpreter diretamente (para depuração).
     public static void main(String[] args) {
-        // --- Exemplos de Expressões ---
-        Expr expression1 = new Expr.Binary(
-                new Expr.Literal(1.0),
-                new Token(TokenType.PLUS, "+", null, 1),
-                new Expr.Binary(
-                        new Expr.Literal(2.0),
-                        new Token(TokenType.STAR, "*", null, 1),
-                        new Expr.Grouping(
-                                new Expr.Binary(
-                                        new Expr.Literal(4.0),
-                                        new Token(TokenType.MINUS, "-", null, 1),
-                                        new Expr.Literal(2.0)))));
-
-        Expr expression2 = new Expr.Unary(
-                new Token(TokenType.BANG, "!", null, 1),
-                new Expr.Literal(true));
-
-        Expr expression3 = new Expr.Binary(
-                new Expr.Literal("hello"),
-                new Token(TokenType.PLUS, "+", null, 1),
-                new Expr.Literal(" world"));
-
-        Expr expression4 = new Expr.Unary(
-                new Token(TokenType.MINUS, "-", null, 1),
-                new Expr.Literal(5.0));
-
-        Expr expression5 = new Expr.Binary(
-                new Expr.Literal(10.0),
-                new Token(TokenType.SLASH, "/", null, 1),
-                new Expr.Literal(0.0));
-
-        Expr expression6 = new Expr.Binary(
-                new Expr.Literal(null),
-                new Token(TokenType.EQUAL_EQUAL, "==", null, 1),
-                new Expr.Literal(null));
-
-        Expr expression7 = new Expr.Binary(
-                new Expr.Literal(10.0),
-                new Token(TokenType.GREATER, ">", null, 1),
-                new Expr.Literal(5.0));
-
-        Expr expression8 = new Expr.Logical(
-                new Expr.Literal(true),
-                new Token(TokenType.AND, "and", null, 1),
-                new Expr.Literal(false));
-
-        // --- Exemplos de Declarações (Stmt) para testar o 'interpret(List<Stmt>)' ---
-        // Criaremos um ambiente temporário e interpretaremos uma lista de statements.
-
-        // Simula:
-        // var x = 10;
-        // print x;
-        // { // novo bloco
-        // var y = x + 5;
-        // if (y > 10) { print "Y é maior que 10"; } else { print "Y é menor ou igual a
-        // 10"; }
-        // y = y + 1; // Atribuição
-        // print y;
-        // }
-        // print x; // x ainda existe
-        // print y; // y não existe mais (fora do escopo), deve dar erro
-
-        // Stmt: var x = 10;
-        Stmt varXStmt = new Stmt.Var(
-                new Token(TokenType.IDENTIFIER, "x", null, 1), // name
-                new Expr.Literal(10.0)); // initializer
-
-        // Stmt: print x;
-        Stmt printXStmt1 = new Stmt.Print(
-                new Expr.Variable(new Token(TokenType.IDENTIFIER, "x", null, 2)));
-
-        // Stmt: var y = x + 5; (dentro do bloco)
-        Stmt varYStmt = new Stmt.Var(
-                new Token(TokenType.IDENTIFIER, "y", null, 4), // name
-                new Expr.Binary(
-                        new Expr.Variable(new Token(TokenType.IDENTIFIER, "x", null, 4)),
-                        new Token(TokenType.PLUS, "+", null, 4),
-                        new Expr.Literal(5.0))); // initializer
-
-        // Stmt: if (y > 10) { print "Y é maior que 10"; } else { print "Y é menor ou
-        // igual a 10"; }
-        Expr ifCondition = new Expr.Binary(
-                new Expr.Variable(new Token(TokenType.IDENTIFIER, "y", null, 5)),
-                new Token(TokenType.GREATER, ">", null, 5),
-                new Expr.Literal(10.0));
-
-        Stmt ifThenBranch = new Stmt.Block(
-                Arrays.asList(
-                        new Stmt.Print(new Expr.Literal("Y é maior que 10"))));
-
-        Stmt ifElseBranch = new Stmt.Block(
-                Arrays.asList(
-                        new Stmt.Print(new Expr.Literal("Y é menor ou igual a 10"))));
-
-        Stmt ifStmt = new Stmt.If(ifCondition, ifThenBranch, ifElseBranch);
-
-        // Stmt: y = y + 1;
-        Stmt assignYStmt = new Stmt.Expression(
-                new Expr.Assign(
-                        new Token(TokenType.IDENTIFIER, "y", null, 7), // name
-                        new Expr.Binary(
-                                new Expr.Variable(new Token(TokenType.IDENTIFIER, "y", null, 7)),
-                                new Token(TokenType.PLUS, "+", null, 7),
-                                new Expr.Literal(1.0))));
-
-        // Stmt: print y;
-        Stmt printYStmt1 = new Stmt.Print(
-                new Expr.Variable(new Token(TokenType.IDENTIFIER, "y", null, 8)));
-
-        // Bloco de declarações
-        Stmt blockStmt = new Stmt.Block(
-                Arrays.asList(
-                        varYStmt,
-                        ifStmt,
-                        assignYStmt,
-                        printYStmt1));
-
-        // Stmt: print x; (após o bloco)
-        Stmt printXStmt2 = new Stmt.Print(
-                new Expr.Variable(new Token(TokenType.IDENTIFIER, "x", null, 11)));
-
-        // Stmt: print y; (fora do escopo do bloco, deve dar erro)
-        Stmt printYStmt2 = new Stmt.Print(
-                new Expr.Variable(new Token(TokenType.IDENTIFIER, "y", null, 12)));
-
-        // Lista de declarações completas para interpretação
-        List<Stmt> statementsToInterpret = Arrays.asList(
-                varXStmt,
-                printXStmt1,
-                blockStmt, // O bloco é um único statement
-                printXStmt2,
-                printYStmt2 // Este deve gerar erro
-        );
-
-        // Instancia o interpretador e executa a lista de statements.
-        Interpreter interpreterForStatements = new Interpreter();
-        System.out.println("\n--- Testando Statements ---");
-        interpreterForStatements.interpret(statementsToInterpret);
-
-        // --- Testando Expressões Simples (como antes) ---
-        System.out.println("\n--- Testando Expressões Simples (Antigo main) ---");
-        Interpreter interpreterForExpressions = new Interpreter();
-
-        System.out.print("Resultado de 1 + 2 * (4 - 2): ");
-        interpreterForExpressions.interpret(expression1);
-
-        System.out.print("Resultado de !true: ");
-        interpreterForExpressions.interpret(expression2);
-
-        System.out.print("Resultado de \"hello\" + \" world\": ");
-        interpreterForExpressions.interpret(expression3);
-
-        System.out.print("Resultado de -5: ");
-        interpreterForExpressions.interpret(expression4);
-
-        System.out.print("Resultado de null == nil: ");
-        interpreterForExpressions.interpret(expression6);
-
-        System.out.print("Resultado de 10 > 5: ");
-        interpreterForExpressions.interpret(expression7);
-
-        System.out.print("Resultado de true and false: ");
-        interpreterForExpressions.interpret(expression8);
-
-        System.out.print("Resultado de 10 / 0 (esperado erro): ");
-        interpreterForExpressions.interpret(expression5);
-        System.out.println(" (A linha anterior deveria ter mostrado o erro de runtime)");
+        // Este main será menos útil agora que o Parser está integrado.
+        // Você pode deixá-lo vazio ou com um teste mínimo para compilação.
+        System.out.println("Interpreter main: Use Lox.java para executar o interpretador completo.");
     }
 }

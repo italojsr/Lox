@@ -1,8 +1,7 @@
-// src/main/java/br/ufma/Stmt.java
 package br.ufma;
 
 import br.ufma.Expr; // Necessário para Expression, If, Print, Var
-import br.ufma.Token; // Necessário para Var
+import br.ufma.Token; // Necessário para Var, Function, Return
 import java.util.List;
 
 public abstract class Stmt {
@@ -11,9 +10,13 @@ public abstract class Stmt {
 
     R visitExpressionStmt(Expression stmt);
 
+    R visitFunctionStmt(Function stmt); // NOVO
+
     R visitIfStmt(If stmt);
 
     R visitPrintStmt(Print stmt);
+
+    R visitReturnStmt(Return stmt); // NOVO
 
     R visitVarStmt(Var stmt);
   }
@@ -49,6 +52,23 @@ public abstract class Stmt {
     }
   }
 
+  public static class Function extends Stmt { // NOVO
+    public final Token name;
+    public final List<Token> params;
+    public final List<Stmt> body;
+
+    public Function(Token name, List<Token> params, List<Stmt> body) {
+      this.name = name;
+      this.params = params;
+      this.body = body;
+    }
+
+    @Override
+    public <R> R accept(Visitor<R> visitor) {
+      return visitor.visitFunctionStmt(this);
+    }
+  }
+
   public static class If extends Stmt {
     public final Expr condition;
     public final Stmt thenBranch;
@@ -76,6 +96,21 @@ public abstract class Stmt {
     @Override
     public <R> R accept(Visitor<R> visitor) {
       return visitor.visitPrintStmt(this);
+    }
+  }
+
+  public static class Return extends Stmt { // NOVO
+    public final Token keyword;
+    public final Expr value;
+
+    public Return(Token keyword, Expr value) {
+      this.keyword = keyword;
+      this.value = value;
+    }
+
+    @Override
+    public <R> R accept(Visitor<R> visitor) {
+      return visitor.visitReturnStmt(this);
     }
   }
 

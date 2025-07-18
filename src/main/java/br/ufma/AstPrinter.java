@@ -32,7 +32,8 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
     public String visitLiteralExpr(Expr.Literal expr) {
         if (expr.value == null)
             return "nil";
-        return expr.value.toString();
+        // Certifique-se de que o literal é tratado como string
+        return String.valueOf(expr.value);
     }
 
     @Override
@@ -48,7 +49,9 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
 
     @Override
     public String visitCallExpr(Expr.Call expr) {
-        return parenthesize("call " + expr.callee.accept(this), expr.arguments.toArray(new Expr[0]));
+        // Converte List<Expr> para Expr[] para o varargs
+        Expr[] argsArray = expr.arguments.toArray(new Expr[0]);
+        return parenthesize("call " + expr.callee.accept(this), argsArray);
     }
 
     @Override
@@ -68,12 +71,14 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
 
     @Override
     public String visitSuperExpr(Expr.Super expr) {
-        return parenthesize("super." + expr.method.lexeme, new Expr[0]);
+        // CORREÇÃO: super não recebe mais uma Expr como argumento, é apenas o nome do
+        // método
+        return parenthesize("super." + expr.method.lexeme);
     }
 
     @Override
     public String visitThisExpr(Expr.This expr) {
-        return "this";
+        return expr.keyword.lexeme; // Retorna "this"
     }
 
     @Override
@@ -86,7 +91,9 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
     @Override
     public String visitBlockStmt(Stmt.Block stmt) {
         // Adaptação de parenthesize para lidar com List<Stmt>
-        return parenthesize("block", stmt.statements.toArray(new Stmt[0]));
+        // Converte List<Stmt> para Stmt[] para o varargs
+        Stmt[] stmtsArray = stmt.statements.toArray(new Stmt[0]);
+        return parenthesizeStmts("block", stmtsArray); // Usa o novo parenthesizeStmts
     }
 
     @Override
@@ -95,16 +102,28 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
     }
 
     @Override
-    public String visitIfStmt(Stmt.If stmt) {
-        if (stmt.elseBranch == null) {
-            return parenthesize("if", stmt.condition, stmt.thenBranch);
+    public String visitFunctionStmt(Stmt.Function stmt) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("(fun " + stmt.name.lexeme + "(");
+        for (Token param : stmt.params) {
+            builder.append(" ").append(param.lexeme);
         }
-        return parenthesize("if-else", stmt.condition, stmt.thenBranch);
+        builder.append(")");
+        // Converte List<Stmt> para Stmt[] para o varargs
+        Stmt[] bodyArray = stmt.body.toArray(new Stmt[0]);
+        builder.append(parenthesizeStmts("body", bodyArray)); // Usa o novo parenthesizeStmts
+        builder.append(")");
+        return builder.toString();
     }
 
-    private String parenthesize(String string, Expr condition, Stmt thenBranch) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'parenthesize'");
+    @Override
+    public String visitIfStmt(Stmt.If stmt) {
+        // CORREÇÃO: Garante que os ramos thenBranch e elseBranch são tratados como Stmt
+        if (stmt.elseBranch == null) {
+            return parenthesizeStmts("if", stmt.condition, stmt.thenBranch); // Usa o novo parenthesizeStmts
+        }
+        return parenthesizeStmts("if-else", stmt.condition, stmt.thenBranch, stmt.elseBranch); // Usa o novo
+                                                                                               // parenthesizeStmts
     }
 
     @Override
@@ -113,14 +132,23 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
     }
 
     @Override
+    public String visitReturnStmt(Stmt.Return stmt) {
+        if (stmt.value == null)
+            return "(return)";
+        return parenthesize("return", stmt.value);
+    }
+
+    @Override
     public String visitVarStmt(Stmt.Var stmt) {
+        // CORREÇÃO: Garante que o initializer é tratado como Expr
         if (stmt.initializer == null) {
-            return parenthesize("var " + stmt.name.lexeme, new Expr[0]);
+            return parenthesize("var " + stmt.name.lexeme);
         }
         return parenthesize("var " + stmt.name.lexeme, stmt.initializer);
     }
     // --- Fim das implementações para os métodos visit de DECLARAÇÕES (Stmt) ---
 
+    // Método auxiliar para parentesizar EXPRESSÕES
     private String parenthesize(String name, Expr... exprs) {
         StringBuilder builder = new StringBuilder();
 
@@ -134,13 +162,19 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
         return builder.toString();
     }
 
-    // SOBRECARGA de parenthesize para lidar com Stmt
-    private String parenthesize(String name, Stmt... stmts) {
+    // NOVO MÉTODO auxiliar para parentesizar STATEMENTS (para evitar ambiguidade)
+    private String parenthesizeStmts(String name, Object... args) { // Pode receber Expr ou Stmt
         StringBuilder builder = new StringBuilder();
         builder.append("(").append(name);
-        for (Stmt stmt : stmts) {
+        for (Object arg : args) {
             builder.append(" ");
-            builder.append(stmt.accept(this)); // Recursivamente visita sub-statements
+            if (arg instanceof Expr) {
+                builder.append(((Expr) arg).accept(this));
+            } else if (arg instanceof Stmt) {
+                builder.append(((Stmt) arg).accept(this));
+            } else {
+                builder.append(String.valueOf(arg)); // Caso genérico
+            }
         }
         builder.append(")");
         return builder.toString();
@@ -179,5 +213,24 @@ public class AstPrinter implements Expr.Visitor<String>, Stmt.Visitor<String> {
         // Exemplo de Stmt para AstPrinter: print "hello";
         Stmt printStmtExample = new Stmt.Print(new Expr.Literal("hello"));
         System.out.println("AST de 'print \"hello\";': " + printer.print(printStmtExample));
+
+        // Exemplo de Stmt.Function para AstPrinter: fun test(a, b) { print a + b; }
+        Stmt.Function funcExample = new Stmt.Function(
+                new Token(TokenType.IDENTIFIER, "test", null, 1), // name
+                Arrays.asList(new Token(TokenType.IDENTIFIER, "a", null, 1),
+                        new Token(TokenType.IDENTIFIER, "b", null, 1)), // params
+                Arrays.asList(new Stmt.Print(new Expr.Binary(
+                        new Expr.Variable(new Token(TokenType.IDENTIFIER, "a", null, 1)),
+                        new Token(TokenType.PLUS, "+", null, 1),
+                        new Expr.Variable(new Token(TokenType.IDENTIFIER, "b", null, 1)))))); // body
+        System.out.println("AST de 'fun test(a, b) { ... }': " + printer.print(funcExample));
+
+        // Exemplo de Stmt.If para AstPrinter: if (true) print "true"; else print
+        // "false";
+        Stmt ifStmtExample = new Stmt.If(
+                new Expr.Literal(true),
+                new Stmt.Print(new Expr.Literal("true")),
+                new Stmt.Print(new Expr.Literal("false")));
+        System.out.println("AST de 'if (true) ...': " + printer.print(ifStmtExample));
     }
 }
