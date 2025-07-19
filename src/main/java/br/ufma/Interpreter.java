@@ -5,11 +5,19 @@ import br.ufma.Stmt;
 import br.ufma.Token;
 import br.ufma.TokenType;
 import java.util.List;
-import java.util.ArrayList; // Adicionado para visitCallExpr
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
-    private Environment environment = new Environment(); // O ambiente global do interpretador
+    // O ambiente global do interpretador. Permanece o mesmo durante toda a execução.
+    private Environment environment = new Environment();
+    
+    // Mapa que armazena a profundidade das variáveis locais resolvidas pelo Resolver.
+    // A chave é a expressão (Expr.Variable ou Expr.Assign) e o valor é a distância
+    // do escopo atual até o escopo onde a variável foi definida.
+    private final Map<Expr, Integer> locals = new HashMap<>();
 
     // Método para interpretar uma única expressão (usado para o prompt, etc.)
     public Object interpret(Expr expression) {
@@ -24,7 +32,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     // Método para interpretar uma lista de declarações (usado para execução de
-    // arquivos/blocos)
+    // arquivos/blocos de código)
     public void interpret(List<Stmt> statements) {
         try {
             for (Stmt statement : statements) {
@@ -35,12 +43,20 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
     }
 
+    // Avalia uma expressão, delegando a chamada para o método visit apropriado
     private Object evaluate(Expr expr) {
         return expr.accept(this);
     }
 
+    // Executa uma declaração, delegando a chamada para o método visit apropriado
     private void execute(Stmt stmt) {
         stmt.accept(this);
+    }
+
+    // Método chamado pelo Resolvedor para informar a profundidade de uma variável.
+    // Essa informação será usada para lookup eficiente de variáveis locais.
+    public void resolve(Expr expr, int depth) {
+        locals.put(expr, depth);
     }
 
     // ----------------------------------------------------
@@ -49,12 +65,14 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitBlockStmt(Stmt.Block stmt) {
+        // Executa um bloco de declarações em um novo escopo (ambiente aninhado).
         executeBlock(stmt.statements, new Environment(environment));
         return null;
     }
 
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
+        // Apenas avalia a expressão; o resultado é descartado para declarações de expressão.
         evaluate(stmt.expression);
         return null;
     }
@@ -62,7 +80,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
         // Quando uma função é declarada, ela é "empacotada" em um objeto LoxFunction.
-        // O 'closure' é o ambiente onde a função foi *definida*.
+        // O 'closure' capturado é o ambiente onde a função foi *definida*.
         LoxFunction function = new LoxFunction(stmt, environment);
         environment.define(stmt.name.lexeme, function); // Define a função no ambiente atual
         return null;
@@ -70,6 +88,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitIfStmt(Stmt.If stmt) {
+        // Avalia a condição; se verdadeira, executa o ramo 'then'; senão, o ramo 'else'.
         if (isTruthy(evaluate(stmt.condition))) {
             execute(stmt.thenBranch);
         } else if (stmt.elseBranch != null) {
@@ -80,6 +99,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitPrintStmt(Stmt.Print stmt) {
+        // Avalia a expressão e imprime seu valor no console.
         Object value = evaluate(stmt.expression);
         System.out.println(stringify(value));
         return null;
@@ -87,20 +107,22 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitReturnStmt(Stmt.Return stmt) {
+        // Lida com o retorno de uma função, lançando uma exceção para controle de fluxo.
         Object value = null;
-        if (stmt.value != null) { // Se há um valor de retorno
+        if (stmt.value != null) { // Se há um valor de retorno, avalia-o
             value = evaluate(stmt.value);
         }
-        throw new Return(value); // Lança a exceção de controle de fluxo
+        throw new Return(value); // Lança a exceção com o valor de retorno
     }
 
     @Override
     public Void visitVarStmt(Stmt.Var stmt) {
+        // Declara uma nova variável no ambiente atual e, se houver, a inicializa.
         Object value = null;
         if (stmt.initializer != null) {
-            value = evaluate(stmt.initializer);
+            value = evaluate(stmt.initializer); // Avalia o inicializador
         }
-        environment.define(stmt.name.lexeme, value); // Define a variável no ambiente atual
+        environment.define(stmt.name.lexeme, value); // Define a variável no ambiente
         return null;
     }
 
@@ -110,17 +132,25 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visitAssignExpr(Expr.Assign expr) {
+        // Avalia o valor e atribui à variável no ambiente correto (local ou global).
         Object value = evaluate(expr.value);
-        environment.assign(expr.name, value); // Atribui o valor no ambiente
-        return value;
+        Integer distance = locals.get(expr); // Pega a distância resolvida
+        if (distance != null) {
+            environment.assignAt(distance, expr.name, value); // Atribuição local
+        } else {
+            environment.assign(expr.name, value); // Atribuição global
+        }
+        return value; // Atribuições também são expressões e retornam o valor atribuído
     }
 
     @Override
     public Object visitBinaryExpr(Expr.Binary expr) {
+        // Avalia os operandos esquerdo e direito e aplica a operação binária.
         Object left = evaluate(expr.left);
         Object right = evaluate(expr.right);
 
         switch (expr.operator.type) {
+            // Operadores de Comparação Numérica
             case GREATER:
                 checkNumberOperands(expr.operator, left, right);
                 return (double) left > (double) right;
@@ -134,15 +164,18 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                 checkNumberOperands(expr.operator, left, right);
                 return (double) left <= (double) right;
 
+            // Operadores de Igualdade (lida com nil e tipos diferentes)
             case BANG_EQUAL:
                 return !isEqual(left, right);
             case EQUAL_EQUAL:
                 return isEqual(left, right);
 
+            // Operadores Aritméticos Numéricos
             case MINUS:
                 checkNumberOperands(expr.operator, left, right);
                 return (double) left - (double) right;
             case PLUS:
+                // Sobrecarga para adição numérica ou concatenação de strings
                 if (left instanceof Double && right instanceof Double) {
                     return (double) left + (double) right;
                 }
@@ -153,7 +186,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                         "Operands must be two numbers or two strings.");
             case SLASH:
                 checkNumberOperands(expr.operator, left, right);
-                if ((double) right == 0.0) {
+                if ((double) right == 0.0) { // Proteção contra divisão por zero
                     throw new RuntimeError(expr.operator, "Division by zero.");
                 }
                 return (double) left / (double) right;
@@ -161,22 +194,21 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                 checkNumberOperands(expr.operator, left, right);
                 return (double) left * (double) right;
         }
-        return null;
+        return null; // Não deveria ser alcançado
     }
 
     @Override
     public Object visitCallExpr(Expr.Call expr) {
-        // Avalia a expressão que representa o 'callee' (geralmente um Expr.Variable ou
-        // Expr.Get)
+        // Avalia a expressão que representa o chamador (callee), que deve ser uma função ou classe.
         Object callee = evaluate(expr.callee);
 
-        // Avalia cada argumento
+        // Avalia todos os argumentos passados para a chamada.
         List<Object> arguments = new ArrayList<>();
         for (Expr argument : expr.arguments) {
             arguments.add(evaluate(argument));
         }
 
-        // Verifica se o 'callee' é realmente chamável (implementa LoxCallable)
+        // Verifica se o 'callee' é realmente um objeto chamável em Lox.
         if (!(callee instanceof LoxCallable)) {
             throw new RuntimeError(expr.paren,
                     "Can only call functions and classes.");
@@ -184,95 +216,101 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
         LoxCallable function = (LoxCallable) callee;
 
-        // Verifica a aridade (número de argumentos esperados vs. passados)
+        // Verifica se o número de argumentos passados corresponde à aridade da função.
         if (arguments.size() != function.arity()) {
             throw new RuntimeError(expr.paren, "Expected " +
                     function.arity() + " arguments but got " +
                     arguments.size() + ".");
         }
 
-        // Chama a função
+        // Executa a chamada da função e retorna seu resultado.
         return function.call(this, arguments);
     }
 
     @Override
     public Object visitGetExpr(Expr.Get expr) {
-        // Esta implementação é um stub; a funcionalidade de acesso a propriedades vem
-        // mais tarde
+        // Implementação futura para acesso a propriedades de objetos (Capítulo 12).
         throw new RuntimeError(expr.name, "Not yet implemented: property access.");
     }
 
     @Override
     public Object visitGroupingExpr(Expr.Grouping expr) {
+        // Avalia a expressão dentro do agrupamento.
         return evaluate(expr.expression);
     }
 
     @Override
     public Object visitLiteralExpr(Expr.Literal expr) {
+        // Literais apenas retornam seus valores.
         return expr.value;
     }
 
     @Override
     public Object visitLogicalExpr(Expr.Logical expr) {
+        // Avalia operadores lógicos 'and' e 'or' com curto-circuito.
         Object left = evaluate(expr.left);
 
         if (expr.operator.type == TokenType.OR) {
-            if (isTruthy(left))
+            if (isTruthy(left)) // Se o lado esquerdo de 'or' é true, não avalia o direito.
                 return left;
-        } else { // AND
-            if (!isTruthy(left))
+        } else { // TokenType.AND
+            if (!isTruthy(left)) // Se o lado esquerdo de 'and' é false, não avalia o direito.
                 return left;
         }
 
-        return evaluate(expr.right);
+        return evaluate(expr.right); // Avalia o lado direito se necessário.
     }
 
     @Override
     public Object visitSetExpr(Expr.Set expr) {
-        // Esta implementação é um stub; a funcionalidade de atribuição de propriedades
-        // vem mais tarde
+        // Implementação futura para atribuição de propriedades de objetos (Capítulo 12).
         throw new RuntimeError(expr.name, "Not yet implemented: property assignment.");
     }
 
     @Override
     public Object visitSuperExpr(Expr.Super expr) {
-        // Esta implementação é um stub; a funcionalidade 'super' vem mais tarde
+        // Implementação futura para a palavra-chave 'super' (Capítulo 12).
         throw new RuntimeError(expr.keyword, "Not yet implemented: 'super'.");
     }
 
     @Override
     public Object visitThisExpr(Expr.This expr) {
-        // Esta implementação é um stub; a funcionalidade 'this' vem mais tarde
+        // Implementação futura para a palavra-chave 'this' (Capítulo 12).
         throw new RuntimeError(expr.keyword, "Not yet implemented: 'this'.");
     }
 
     @Override
     public Object visitUnaryExpr(Expr.Unary expr) {
+        // Avalia o operando à direita e aplica a operação unária.
         Object right = evaluate(expr.right);
 
         switch (expr.operator.type) {
-            case BANG:
+            case BANG: // Negação lógica
                 return !isTruthy(right);
-            case MINUS:
+            case MINUS: // Negação numérica
                 checkNumberOperand(expr.operator, right);
                 return -(double) right;
         }
-        return null;
+        return null; // Não deveria ser alcançado
     }
 
     @Override
     public Object visitVariableExpr(Expr.Variable expr) {
-        return environment.get(expr.name);
+        // Busca o valor da variável no ambiente correto (local ou global),
+        // usando a informação de profundidade do resolvedor.
+        return lookUpVariable(expr.name, expr);
     }
 
     // ----------------------------------------------------
-    // Métodos Auxiliares
+    // Métodos Auxiliares do Interpretador
     // ----------------------------------------------------
 
+    // Converte um valor Lox (Java Object) para uma representação de string imprimível.
     private String stringify(Object object) {
         if (object == null)
-            return "nil";
+            return "nil"; // Lox 'nil' é Java 'null'
 
+        // Formata números decimais para não terem ".0" se forem inteiros.
         if (object instanceof Double) {
             String text = object.toString();
             if (text.endsWith(".0")) {
@@ -283,50 +321,67 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return object.toString();
     }
 
+    // Determina a "truthiness" de um valor Lox (o que é considerado verdadeiro/falso em contextos booleanos).
     private boolean isTruthy(Object object) {
         if (object == null)
-            return false;
+            return false; // 'nil' é falso
         if (object instanceof Boolean)
-            return (boolean) object;
-        return true;
+            return (boolean) object; // Booleanos são eles mesmos
+        return true; // Todos os outros valores (números, strings, etc.) são verdadeiros
     }
 
+    // Compara dois objetos para igualdade em Lox.
     private boolean isEqual(Object a, Object b) {
         if (a == null && b == null)
-            return true;
+            return true; // nil == nil
         if (a == null)
-            return false;
-        return a.equals(b);
+            return false; // Um é nil, o outro não
+        return a.equals(b); // Usa o método equals de Java para outros tipos
     }
 
+    // Lança um RuntimeError se o operando de uma operação unária não for um número.
     private void checkNumberOperand(Token operator, Object operand) {
         if (operand instanceof Double)
             return;
         throw new RuntimeError(operator, "Operand must be a number.");
     }
 
+    // Lança um RuntimeError se os operandos de uma operação binária não forem números.
     private void checkNumberOperands(Token operator, Object left, Object right) {
         if (left instanceof Double && right instanceof Double)
             return;
         throw new RuntimeError(operator, "Operands must be numbers.");
     }
 
+    // Executa uma lista de declarações dentro de um novo ambiente.
+    // Usado por blocos de código e corpos de funções.
     public void executeBlock(List<Stmt> statements, Environment environment) {
-        Environment previous = this.environment;
+        Environment previous = this.environment; // Salva o ambiente atual
         try {
-            this.environment = environment;
+            this.environment = environment; // Define o novo ambiente para o bloco
             for (Stmt statement : statements) {
-                execute(statement);
+                execute(statement); // Executa cada declaração no bloco
             }
         } finally {
-            this.environment = previous;
+            this.environment = previous; // Restaura o ambiente anterior após o bloco
+        }
+    }
+
+    // Busca o valor de uma variável usando a informação de profundidade do Resolvedor.
+    private Object lookUpVariable(Token name, Expr expr) {
+        Integer distance = locals.get(expr); // Tenta obter a distância do resolvedor
+        if (distance != null) {
+            // Se o resolvedor encontrou a variável localmente, usa getAt para busca direta.
+            return environment.getAt(distance, name.lexeme);
+        } else {
+            // Se o resolvedor não forneceu uma distância (é null), assume que é uma variável global.
+            return environment.get(name);
         }
     }
 
     // O método main para testar o Interpreter diretamente (para depuração).
+    // Geralmente não é usado para execução principal; Lox.java orquestra tudo.
     public static void main(String[] args) {
-        // Este main será menos útil agora que o Parser está integrado.
-        // Você pode deixá-lo vazio ou com um teste mínimo para compilação.
         System.out.println("Interpreter main: Use Lox.java para executar o interpretador completo.");
     }
 }

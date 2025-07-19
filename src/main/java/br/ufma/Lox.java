@@ -51,8 +51,8 @@ public class Lox {
             if (line == null)
                 break; // Sai do loop se a linha for nula (EOF - Ctrl+D ou Ctrl+Z)
 
-            // *** CORREÇÃO ESSENCIAL: RESETAR OS FLAGS DE ERRO ANTES DE PROCESSAR CADA NOVA
-            // LINHA ***
+            // *** ESSENCIAL: RESETAR OS FLAGS DE ERRO ANTES DE PROCESSAR CADA NOVA LINHA
+            // ***
             // Isso garante que erros de uma linha anterior não impeçam a execução da linha
             // atual.
             hadError = false;
@@ -82,7 +82,19 @@ public class Lox {
         if (hadError)
             return;
 
-        // 3. Interpretação: Percorre a AST e executa o código Lox
+        // 3. Resolução de Variáveis (Binding): Análise estática para resolver variáveis
+        // locais
+        // Isso é feito *antes* da interpretação.
+        Resolver resolver = new Resolver(interpreter);
+        resolver.resolve(statements);
+
+        // Se o resolvedor encontrar um erro (ex: variável usada antes de inicializar),
+        // a execução é interrompida.
+        // O resolvedor reporta erros via Lox.error, que seta hadError.
+        if (hadError)
+            return;
+
+        // 4. Interpretação: Percorre a AST e executa o código Lox
         interpreter.interpret(statements);
     }
 
