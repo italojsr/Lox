@@ -1,3 +1,4 @@
+// src/main/java/br/ufma/Interpreter.java
 package br.ufma;
 
 import br.ufma.Expr;
@@ -11,10 +12,12 @@ import java.util.Map;
 
 public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
-    // O ambiente global do interpretador. Permanece o mesmo durante toda a execução.
+    // O ambiente global do interpretador. Permanece o mesmo durante toda a
+    // execução.
     private Environment environment = new Environment();
-    
-    // Mapa que armazena a profundidade das variáveis locais resolvidas pelo Resolver.
+
+    // Mapa que armazena a profundidade das variáveis locais resolvidas pelo
+    // Resolver.
     // A chave é a expressão (Expr.Variable ou Expr.Assign) e o valor é a distância
     // do escopo atual até o escopo onde a variável foi definida.
     private final Map<Expr, Integer> locals = new HashMap<>();
@@ -71,24 +74,75 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
+    public Void visitClassStmt(Stmt.Class stmt) { // IMPLEMENTAÇÃO COMPLETA DE CLASSE
+        // Resolve a superclasse, se houver
+        LoxClass superclass = null;
+        if (stmt.superclass != null) {
+            Object superClassObject = evaluate(stmt.superclass);
+            if (!(superClassObject instanceof LoxClass)) {
+                throw new RuntimeError(stmt.superclass.name,
+                        "Superclass must be a class.");
+            }
+            superclass = (LoxClass) superClassObject;
+        }
+
+        // Define o nome da classe temporariamente como null ou placeholders antes de
+        // definir a classe completa.
+        // Isso permite que a classe se referencie recursivamente no futuro (ex: para
+        // métodos estáticos).
+        // A atribuição final do objeto LoxClass real ocorre após o processamento dos
+        // métodos.
+        environment.define(stmt.name.lexeme, null);
+
+        // Cria um novo ambiente para a herança (onde a superclasse fica definida como
+        // 'super').
+        if (stmt.superclass != null) {
+            environment = new Environment(environment); // Novo ambiente aninhado
+            environment.define("super", superclass); // 'super' é definido aqui
+        }
+
+        Map<String, LoxFunction> methods = new HashMap<>();
+        for (Stmt.Function method : stmt.methods) {
+            // Para o construtor 'init', setamos isInitializer como true
+            boolean isInitializer = method.name.lexeme.equals("init");
+            LoxFunction function = new LoxFunction(method, environment, isInitializer);
+            methods.put(method.name.lexeme, function);
+        }
+
+        // Cria o objeto LoxClass final com o nome, superclasse e métodos.
+        LoxClass klass = new LoxClass(stmt.name.lexeme, superclass, methods);
+
+        // Restaura o ambiente após a superclasse ser processada (remove o ambiente de
+        // 'super').
+        if (stmt.superclass != null) {
+            environment = environment.enclosing;
+        }
+
+        // Atribui a classe real (o objeto LoxClass) ao seu nome no ambiente.
+        environment.assign(stmt.name, klass);
+        return null;
+    }
+
+    @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
-        // Apenas avalia a expressão; o resultado é descartado para declarações de expressão.
+        // Apenas avalia a expressão; o resultado é descartado para declarações de
+        // expressão.
         evaluate(stmt.expression);
         return null;
     }
 
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
-        // Quando uma função é declarada, ela é "empacotada" em um objeto LoxFunction.
-        // O 'closure' capturado é o ambiente onde a função foi *definida*.
-        LoxFunction function = new LoxFunction(stmt, environment);
-        environment.define(stmt.name.lexeme, function); // Define a função no ambiente atual
+        // isInitializer é false para funções regulares
+        LoxFunction function = new LoxFunction(stmt, environment, false);
+        environment.define(stmt.name.lexeme, function); // Define a função no ambiente
         return null;
     }
 
     @Override
     public Void visitIfStmt(Stmt.If stmt) {
-        // Avalia a condição; se verdadeira, executa o ramo 'then'; senão, o ramo 'else'.
+        // Avalia a condição; se verdadeira, executa o ramo 'then'; senão, o ramo
+        // 'else'.
         if (isTruthy(evaluate(stmt.condition))) {
             execute(stmt.thenBranch);
         } else if (stmt.elseBranch != null) {
@@ -107,7 +161,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Void visitReturnStmt(Stmt.Return stmt) {
-        // Lida com o retorno de uma função, lançando uma exceção para controle de fluxo.
+        // Lida com o retorno de uma função, lançando uma exceção para controle de
+        // fluxo.
         Object value = null;
         if (stmt.value != null) { // Se há um valor de retorno, avalia-o
             value = evaluate(stmt.value);
@@ -123,6 +178,14 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
             value = evaluate(stmt.initializer); // Avalia o inicializador
         }
         environment.define(stmt.name.lexeme, value); // Define a variável no ambiente
+        return null;
+    }
+
+    @Override
+    public Void visitWhileStmt(Stmt.While stmt) { // IMPLEMENTAÇÃO DO WHILE
+        while (isTruthy(evaluate(stmt.condition))) { // Enquanto a condição for verdadeira
+            execute(stmt.body); // Executa o corpo do loop
+        }
         return null;
     }
 
@@ -179,11 +242,11 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
                 if (left instanceof Double && right instanceof Double) {
                     return (double) left + (double) right;
                 }
-                if (left instanceof String && right instanceof String) {
-                    return (String) left + (String) right;
+                if (left instanceof String || right instanceof String) {
+                    return stringify(left) + stringify(right);
                 }
                 throw new RuntimeError(expr.operator,
-                        "Operands must be two numbers or two strings.");
+                        "Operands must be two numbers or at least one string for concatenation.");
             case SLASH:
                 checkNumberOperands(expr.operator, left, right);
                 if ((double) right == 0.0) { // Proteção contra divisão por zero
@@ -199,7 +262,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
     @Override
     public Object visitCallExpr(Expr.Call expr) {
-        // Avalia a expressão que representa o chamador (callee), que deve ser uma função ou classe.
+        // Avalia a expressão que representa o chamador (callee), que deve ser uma
+        // função ou classe.
         Object callee = evaluate(expr.callee);
 
         // Avalia todos os argumentos passados para a chamada.
@@ -228,9 +292,15 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
-    public Object visitGetExpr(Expr.Get expr) {
-        // Implementação futura para acesso a propriedades de objetos (Capítulo 12).
-        throw new RuntimeError(expr.name, "Not yet implemented: property access.");
+    public Object visitGetExpr(Expr.Get expr) { // IMPLEMENTAÇÃO COMPLETA DE GET
+        Object object = evaluate(expr.object); // Avalia o objeto à esquerda do '.'
+
+        if (object instanceof LoxInstance) { // Se for uma instância de Lox
+            return ((LoxInstance) object).get(expr.name); // Chama o método get da instância
+        }
+
+        throw new RuntimeError(expr.name,
+                "Only instances have properties.");
     }
 
     @Override
@@ -262,21 +332,51 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
 
     @Override
-    public Object visitSetExpr(Expr.Set expr) {
-        // Implementação futura para atribuição de propriedades de objetos (Capítulo 12).
-        throw new RuntimeError(expr.name, "Not yet implemented: property assignment.");
+    public Object visitSetExpr(Expr.Set expr) { // IMPLEMENTAÇÃO COMPLETA DE SET
+        Object object = evaluate(expr.object); // Avalia o objeto à esquerda do '.'
+
+        if (!(object instanceof LoxInstance)) { // Verifica se é uma instância
+            throw new RuntimeError(expr.name,
+                    "Only instances have fields.");
+        }
+
+        Object value = evaluate(expr.value); // Avalia o valor a ser atribuído
+        ((LoxInstance) object).set(expr.name, value); // Chama o método set da instância
+        return value;
     }
 
     @Override
-    public Object visitSuperExpr(Expr.Super expr) {
-        // Implementação futura para a palavra-chave 'super' (Capítulo 12).
-        throw new RuntimeError(expr.keyword, "Not yet implemented: 'super'.");
+    public Object visitSuperExpr(Expr.Super expr) { // IMPLEMENTAÇÃO COMPLETA DE SUPER
+        // 'super' é resolvido estaticamente. O Resolvedor armazena a distância
+        // para a superclasse e para a instância 'this'.
+        Integer distance = locals.get(expr);
+        // A superclasse está sempre na distância do 'super' token mais 1, no ambiente.
+        LoxClass superclass = (LoxClass) environment.getAt(distance, "super");
+
+        // A instância atual ('this') está a uma profundidade a menos que a superclasse.
+        // O Resolvedor garante que 'this' está definido a 'distance-1'.
+        LoxInstance instance = (LoxInstance) environment.getAt(distance - 1, "this");
+
+        // Encontra o método na superclasse.
+        LoxFunction method = superclass.findMethod(expr.method.lexeme);
+
+        // Tratamento de erro se o método não existe na superclasse.
+        if (method == null) {
+            throw new RuntimeError(expr.method,
+                    "Undefined property '" + expr.method.lexeme + "'.");
+        }
+
+        // Liga o método à instância atual ('this') e retorna.
+        // Isso garante que 'this' dentro do método da superclasse ainda aponta para a
+        // instância original.
+        return method.bind(instance);
     }
 
     @Override
-    public Object visitThisExpr(Expr.This expr) {
-        // Implementação futura para a palavra-chave 'this' (Capítulo 12).
-        throw new RuntimeError(expr.keyword, "Not yet implemented: 'this'.");
+    public Object visitThisExpr(Expr.This expr) { // IMPLEMENTAÇÃO COMPLETA DE THIS
+        // 'this' é uma variável local. Sua profundidade é resolvida estaticamente.
+        // Usamos o lookUpVariable que já sabe como lidar com isso.
+        return lookUpVariable(expr.keyword, expr);
     }
 
     @Override
@@ -305,7 +405,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     // Métodos Auxiliares do Interpretador
     // ----------------------------------------------------
 
-    // Converte um valor Lox (Java Object) para uma representação de string imprimível.
+    // Converte um valor Lox (Java Object) para uma representação de string
+    // imprimível.
     private String stringify(Object object) {
         if (object == null)
             return "nil"; // Lox 'nil' é Java 'null'
@@ -321,7 +422,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         return object.toString();
     }
 
-    // Determina a "truthiness" de um valor Lox (o que é considerado verdadeiro/falso em contextos booleanos).
+    // Determina a "truthiness" de um valor Lox (o que é considerado
+    // verdadeiro/falso em contextos booleanos).
     private boolean isTruthy(Object object) {
         if (object == null)
             return false; // 'nil' é falso
@@ -346,7 +448,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         throw new RuntimeError(operator, "Operand must be a number.");
     }
 
-    // Lança um RuntimeError se os operandos de uma operação binária não forem números.
+    // Lança um RuntimeError se os operandos de uma operação binária não forem
+    // números.
     private void checkNumberOperands(Token operator, Object left, Object right) {
         if (left instanceof Double && right instanceof Double)
             return;
@@ -367,14 +470,16 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
         }
     }
 
-    // Busca o valor de uma variável usando a informação de profundidade do Resolvedor.
+    // Busca o valor de uma variável usando a informação de profundidade do
+    // Resolvedor.
     private Object lookUpVariable(Token name, Expr expr) {
         Integer distance = locals.get(expr); // Tenta obter a distância do resolvedor
         if (distance != null) {
             // Se o resolvedor encontrou a variável localmente, usa getAt para busca direta.
             return environment.getAt(distance, name.lexeme);
         } else {
-            // Se o resolvedor não forneceu uma distância (é null), assume que é uma variável global.
+            // Se o resolvedor não forneceu uma distância (é null), assume que é uma
+            // variável global.
             return environment.get(name);
         }
     }

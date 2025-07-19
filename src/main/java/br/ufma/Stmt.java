@@ -1,24 +1,29 @@
+// src/main/java/br/ufma/Stmt.java
 package br.ufma;
 
-import br.ufma.Expr; // Necessário para Expression, If, Print, Var
-import br.ufma.Token; // Necessário para Var, Function, Return
+import br.ufma.Expr; // Necessário para Expression, If, Print, Var, Class, While
+import br.ufma.Token; // Necessário para Var, Function, Return, Class
 import java.util.List;
 
 public abstract class Stmt {
   public interface Visitor<R> {
     R visitBlockStmt(Block stmt);
 
+    R visitClassStmt(Class stmt);
+
     R visitExpressionStmt(Expression stmt);
 
-    R visitFunctionStmt(Function stmt); // NOVO
+    R visitFunctionStmt(Function stmt);
 
     R visitIfStmt(If stmt);
 
     R visitPrintStmt(Print stmt);
 
-    R visitReturnStmt(Return stmt); // NOVO
+    R visitReturnStmt(Return stmt);
 
     R visitVarStmt(Var stmt);
+
+    R visitWhileStmt(While stmt); // NOVO
   }
 
   // O método 'accept' abstrato da classe base Stmt
@@ -39,6 +44,23 @@ public abstract class Stmt {
     }
   }
 
+  public static class Class extends Stmt {
+    public final Token name;
+    public final Expr.Variable superclass; // Representa a superclasse, se houver
+    public final List<Stmt.Function> methods; // Lista de métodos da classe
+
+    public Class(Token name, Expr.Variable superclass, List<Stmt.Function> methods) {
+      this.name = name;
+      this.superclass = superclass;
+      this.methods = methods;
+    }
+
+    @Override
+    public <R> R accept(Visitor<R> visitor) {
+      return visitor.visitClassStmt(this);
+    }
+  }
+
   public static class Expression extends Stmt {
     public final Expr expression;
 
@@ -52,7 +74,7 @@ public abstract class Stmt {
     }
   }
 
-  public static class Function extends Stmt { // NOVO
+  public static class Function extends Stmt {
     public final Token name;
     public final List<Token> params;
     public final List<Stmt> body;
@@ -99,7 +121,7 @@ public abstract class Stmt {
     }
   }
 
-  public static class Return extends Stmt { // NOVO
+  public static class Return extends Stmt {
     public final Token keyword;
     public final Expr value;
 
@@ -126,6 +148,21 @@ public abstract class Stmt {
     @Override
     public <R> R accept(Visitor<R> visitor) {
       return visitor.visitVarStmt(this);
+    }
+  }
+
+  public static class While extends Stmt { // NOVO
+    public final Expr condition;
+    public final Stmt body;
+
+    public While(Expr condition, Stmt body) {
+      this.condition = condition;
+      this.body = body;
+    }
+
+    @Override
+    public <R> R accept(Visitor<R> visitor) {
+      return visitor.visitWhileStmt(this);
     }
   }
 }

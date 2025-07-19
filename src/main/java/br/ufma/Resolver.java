@@ -1,100 +1,100 @@
+// src/main/java/br/ufma/Resolver.java
+
 package br.ufma;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Stack; // Para a pilha de escopos
+import java.util.Stack;
 
 public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
-    private final Interpreter interpreter; // Referência ao interpretador para resolver variáveis
-
+    private final Interpreter interpreter;
     private final Stack<Map<String, Boolean>> scopes = new Stack<>();
 
-    // Usado para controlar se estamos dentro de uma função.
+    // Usado para controlar o tipo de contexto de função atual.
     private FunctionType currentFunction = FunctionType.NONE;
 
-    // Enum para identificar o tipo de função ou contexto atual.
+    // Usado para controlar o tipo de contexto de classe atual.
+    private ClassType currentClass = ClassType.NONE;
+
+    // Enum para identificar o tipo de função ou contexto.
     private enum FunctionType {
         NONE,
         FUNCTION, // Uma função comum
-        METHOD // Um método de classe (futuro)
+        METHOD, // Um método de classe (que não é o inicializador)
+        INITIALIZER // O método 'init' de uma classe
+    }
+
+    // Enum para identificar o tipo de contexto de classe.
+    private enum ClassType {
+        NONE,
+        CLASS, // Dentro de uma classe comum (não uma subclasse)
+        SUBCLASS // Dentro de uma subclasse (onde 'super' pode ser usado)
     }
 
     public Resolver(Interpreter interpreter) {
         this.interpreter = interpreter;
     }
 
-    // Método principal para iniciar a resolução em uma lista de declarações.
     public void resolve(List<Stmt> statements) {
         for (Stmt statement : statements) {
-            resolve(statement); // Chama o método resolve sobrecarregado para cada Stmt
+            resolve(statement);
         }
     }
 
-    // Método sobrecarregado para resolver uma única declaração (Stmt).
     private void resolve(Stmt stmt) {
-        stmt.accept(this); // Inicia a visitação da declaração
+        stmt.accept(this);
     }
 
-    // Método sobrecarregado para resolver uma única expressão (Expr).
     private void resolve(Expr expr) {
-        expr.accept(this); // Inicia a visitação da expressão
+        expr.accept(this);
     }
 
     // --- Gerenciamento de Escopos ---
-    // Inicia um novo escopo (adiciona um mapa vazio à pilha).
     private void beginScope() {
         scopes.push(new HashMap<String, Boolean>());
     }
 
-    // Finaliza um escopo (remove o mapa do topo da pilha).
     private void endScope() {
         scopes.pop();
     }
 
     private void declare(Token name) {
         if (scopes.isEmpty())
-            return; // Se não há escopos, é o escopo global (sem verificação)
-
-        Map<String, Boolean> scope = scopes.peek(); // Pega o escopo mais interno
-        if (scope.containsKey(name.lexeme)) { // Verifica duplicidade no mesmo escopo
+            return;
+        Map<String, Boolean> scope = scopes.peek();
+        if (scope.containsKey(name.lexeme)) {
             Lox.error(name.line,
                     "Already a variable with this name in this scope.");
         }
-        scope.put(name.lexeme, false); // Declara, mas marca como não pronta
+        scope.put(name.lexeme, false);
     }
 
-    // Define uma variável no escopo mais interno, marcando-a como "pronta" para
-    // uso.
     private void define(Token name) {
         if (scopes.isEmpty())
-            return; // Se não há escopos, é o escopo global (sem verificação)
-        scopes.peek().put(name.lexeme, true); // Marca como pronta
+            return;
+        scopes.peek().put(name.lexeme, true);
     }
 
-    // Resolve uma variável (identificador) para determinar a qual escopo ela
-    // pertence.
-    // Se for uma variável local, informa ao interpretador a sua profundidade.
     private void resolveLocal(Expr expr, Token name) {
-        // Percorre a pilha de escopos de dentro para fora.
         for (int i = scopes.size() - 1; i >= 0; i--) {
             if (scopes.get(i).containsKey(name.lexeme)) {
-                // Se encontrar a variável, informa ao interpretador a profundidade (distância
-                // do escopo atual).
                 interpreter.resolve(expr, scopes.size() - 1 - i);
                 return;
             }
         }
-        // Se não encontrar, assume que é uma variável global (interpretador já cuida
-        // disso).
     }
 
-    // Resolve um corpo de função (parâmetros e corpo).
+    // Resolve o corpo de uma função ou método.
     private void resolveFunction(List<Stmt> body, FunctionType type) {
         FunctionType enclosingFunction = currentFunction; // Salva o tipo de função atual
         currentFunction = type; // Define o novo tipo de função
 
         beginScope(); // Funções criam um novo escopo
+        // Parâmetros da função são declarados e definidos no novo escopo.
+        // Para 'init', seus parâmetros não podem ser usados antes de 'this' estar
+        // disponível.
+        // (Esta parte será preenchida quando o Parser lidar com parâmetros reais)
 
         // Resolve o corpo da função.
         resolve(body);
@@ -104,142 +104,199 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     }
 
     // --- Implementações dos métodos visit para Declarações (Stmt) ---
-    // Estes métodos percorrem a AST de declarações.
 
     @Override
     public Void visitBlockStmt(Stmt.Block stmt) {
-        beginScope(); // Entra em um novo escopo para o bloco
-        resolve(stmt.statements); // Resolve as declarações dentro do bloco
-        endScope(); // Sai do escopo do bloco
+        beginScope();
+        resolve(stmt.statements);
+        endScope();
+        return null;
+    }
+
+    @Override
+    public Void visitClassStmt(Stmt.Class stmt) { // IMPLEMENTAÇÃO COMPLETA
+        ClassType enclosingClass = currentClass; // Salva o tipo de classe atual
+        currentClass = ClassType.CLASS; // Define o novo tipo de classe (inicialmente CLASS)
+
+        declare(stmt.name); // Declara o nome da classe
+        define(stmt.name); // Define o nome da classe (permitindo recursão para classes estáticas, etc.)
+
+        // Resolução de herança:
+        if (stmt.superclass != null) {
+            if (stmt.name.lexeme.equals(stmt.superclass.name.lexeme)) {
+                Lox.error(stmt.superclass.name.line, "A class can't inherit from itself.");
+            }
+            resolve(stmt.superclass); // Resolve o nome da superclasse
+            beginScope(); // Cria um escopo para 'super'
+            scopes.peek().put("super", true); // Define 'super' no escopo
+            currentClass = ClassType.SUBCLASS; // Marca como subclasse
+        }
+
+        beginScope(); // Cria um novo escopo para os campos e métodos da instância (onde 'this' vive)
+        scopes.peek().put("this", true); // Define 'this' no escopo
+
+        // Resolve os métodos da classe
+        for (Stmt.Function method : stmt.methods) {
+            FunctionType declarationType = FunctionType.METHOD;
+            if (method.name.lexeme.equals("init")) { // Se for o construtor 'init'
+                declarationType = FunctionType.INITIALIZER;
+            }
+            resolveFunction(method.body, declarationType); // Resolve o corpo de cada método
+        }
+
+        endScope(); // Finaliza o escopo de 'this'
+        if (stmt.superclass != null) {
+            endScope(); // Finaliza o escopo de 'super' se houver herança
+        }
+        currentClass = enclosingClass; // Restaura o tipo de classe anterior
         return null;
     }
 
     @Override
     public Void visitExpressionStmt(Stmt.Expression stmt) {
-        resolve(stmt.expression); // Resolve a expressão
+        resolve(stmt.expression);
         return null;
     }
 
     @Override
     public Void visitFunctionStmt(Stmt.Function stmt) {
-        declare(stmt.name); // Declara o nome da função no escopo atual
-        define(stmt.name); // Define o nome da função (para permitir recursão)
+        declare(stmt.name);
+        define(stmt.name);
 
         // Resolve o corpo da função.
-        resolveFunction(stmt.body, FunctionType.FUNCTION); // Chama o helper para o corpo da função
+        resolveFunction(stmt.body, FunctionType.FUNCTION);
         return null;
     }
 
     @Override
     public Void visitIfStmt(Stmt.If stmt) {
-        resolve(stmt.condition); // Resolve a condição
-        resolve(stmt.thenBranch); // Resolve o ramo 'then'
+        resolve(stmt.condition);
+        resolve(stmt.thenBranch);
         if (stmt.elseBranch != null) {
-            resolve(stmt.elseBranch); // Resolve o ramo 'else', se existir
+            resolve(stmt.elseBranch);
         }
         return null;
     }
 
     @Override
     public Void visitPrintStmt(Stmt.Print stmt) {
-        resolve(stmt.expression); // Resolve a expressão a ser impressa
+        resolve(stmt.expression);
         return null;
     }
 
     @Override
-    public Void visitReturnStmt(Stmt.Return stmt) {
+    public Void visitReturnStmt(Stmt.Return stmt) { // LÓGICA DE ERRO ATUALIZADA
         if (currentFunction == FunctionType.NONE) { // Não pode ter 'return' fora de uma função
             Lox.error(stmt.keyword.line, "Can't return from top-level code.");
         }
         if (stmt.value != null) {
-            resolve(stmt.value); // Resolve o valor de retorno
+            // Se o return está em um inicializador (init), não pode retornar um valor.
+            if (currentFunction == FunctionType.INITIALIZER) {
+                Lox.error(stmt.keyword.line, "Can't return a value from an initializer.");
+            }
+            resolve(stmt.value);
         }
         return null;
     }
 
     @Override
     public Void visitVarStmt(Stmt.Var stmt) {
-        declare(stmt.name); // Declara a variável (marca como não inicializada)
+        declare(stmt.name);
         if (stmt.initializer != null) {
-            resolve(stmt.initializer); // Resolve o inicializador
+            resolve(stmt.initializer);
         }
-        define(stmt.name); // Define a variável (marca como inicializada)
+        define(stmt.name);
+        return null;
+    }
+
+    @Override
+    public Void visitWhileStmt(Stmt.While stmt) {
+        resolve(stmt.condition);
+        resolve(stmt.body);
         return null;
     }
 
     // --- Implementações dos métodos visit para Expressões (Expr) ---
-    // Estes métodos percorrem a AST de expressões.
 
     @Override
     public Void visitAssignExpr(Expr.Assign expr) {
-        resolve(expr.value); // Resolve o valor a ser atribuído
-        resolveLocal(expr, expr.name); // Resolve a variável onde o valor será atribuído
+        resolve(expr.value);
+        resolveLocal(expr, expr.name);
         return null;
     }
 
     @Override
     public Void visitBinaryExpr(Expr.Binary expr) {
-        resolve(expr.left); // Resolve o operando esquerdo
-        resolve(expr.right); // Resolve o operando direito
+        resolve(expr.left);
+        resolve(expr.right);
         return null;
     }
 
     @Override
     public Void visitCallExpr(Expr.Call expr) {
-        resolve(expr.callee); // Resolve a expressão que é chamada (função, variável, etc.)
+        resolve(expr.callee);
         for (Expr argument : expr.arguments) {
-            resolve(argument); // Resolve cada argumento
+            resolve(argument);
         }
         return null;
     }
 
     @Override
     public Void visitGetExpr(Expr.Get expr) {
-        resolve(expr.object); // Resolve o objeto do qual a propriedade é acessada (futuro)
+        resolve(expr.object);
         return null;
     }
 
     @Override
     public Void visitGroupingExpr(Expr.Grouping expr) {
-        resolve(expr.expression); // Resolve a expressão agrupada
+        resolve(expr.expression);
         return null;
     }
 
     @Override
     public Void visitLiteralExpr(Expr.Literal expr) {
-        // Literais não precisam de resolução
         return null;
     }
 
     @Override
     public Void visitLogicalExpr(Expr.Logical expr) {
-        resolve(expr.left); // Resolve o operando esquerdo
-        resolve(expr.right); // Resolve o operando direito
+        resolve(expr.left);
+        resolve(expr.right);
         return null;
     }
 
     @Override
     public Void visitSetExpr(Expr.Set expr) {
-        resolve(expr.value); // Resolve o valor a ser setado
-        resolve(expr.object); // Resolve o objeto onde a propriedade será setada (futuro)
+        resolve(expr.value);
+        resolve(expr.object);
         return null;
     }
 
     @Override
-    public Void visitSuperExpr(Expr.Super expr) {
-        // Resolução de 'super' virá com classes (futuro)
+    public Void visitSuperExpr(Expr.Super expr) { // IMPLEMENTAÇÃO COMPLETA
+        if (currentClass == ClassType.NONE) { // 'super' só pode ser usado dentro de uma classe
+            Lox.error(expr.keyword.line, "Can't use 'super' outside of a class.");
+        } else if (currentClass != ClassType.SUBCLASS) { // 'super' só pode ser usado em uma subclasse
+            Lox.error(expr.keyword.line, "Can't use 'super' in a class with no superclass.");
+        }
+        resolveLocal(expr, expr.keyword); // Resolve a palavra-chave 'super'
+        // Não precisa resolver expr.method, pois é um nome e será buscado em tempo de
+        // execução.
         return null;
     }
 
     @Override
-    public Void visitThisExpr(Expr.This expr) {
-        // Resolução de 'this' virá com classes (futuro)
+    public Void visitThisExpr(Expr.This expr) { // IMPLEMENTAÇÃO COMPLETA
+        if (currentClass == ClassType.NONE) { // 'this' só pode ser usado dentro de uma classe
+            Lox.error(expr.keyword.line, "Can't use 'this' outside of a class.");
+        }
+        resolveLocal(expr, expr.keyword); // Resolve a palavra-chave 'this'
         return null;
     }
 
     @Override
     public Void visitUnaryExpr(Expr.Unary expr) {
-        resolve(expr.right); // Resolve o operando à direita
+        resolve(expr.right);
         return null;
     }
 
@@ -254,7 +311,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
                         "Can't read local variable in its own initializer.");
             }
         }
-        resolveLocal(expr, expr.name); // Resolve a variável (identificador)
+        resolveLocal(expr, expr.name);
         return null;
     }
 }

@@ -1,3 +1,4 @@
+// src/main/java/br/ufma/Parser.java
 
 package br.ufma;
 
@@ -35,18 +36,42 @@ public class Parser {
 
     // --- Regras de Parsing (do mais alto para o mais baixo na precedência) ---
 
-    // Regra para uma declaração (statement, var, ou fun declaration)
+    // Regra para uma declaração (class, fun, var, ou statement)
     private Stmt declaration() {
         try {
+            if (match(CLASS))
+                return classDeclaration(); // NOVO: class declaration
             if (match(FUN))
-                return function("function"); // fun declaration
+                return function("function");
             if (match(VAR))
-                return varDeclaration(); // var declaration
-            return statement(); // outras declarações
+                return varDeclaration();
+            return statement();
         } catch (ParseError error) {
             synchronize(); // Sincroniza em caso de erro para continuar o parsing
             return null; // Retorna null para indicar que não conseguiu parsear
         }
+    }
+
+    // NOVO: Regra para parsear declarações de classe (class Name < Super { ... })
+    private Stmt classDeclaration() {
+        Token name = consume(IDENTIFIER, "Expect class name.");
+
+        // Verifica se há superclasse (herança)
+        Expr.Variable superclass = null;
+        if (match(LESS)) {
+            consume(IDENTIFIER, "Expect superclass name.");
+            superclass = new Expr.Variable(previous());
+        }
+
+        consume(LEFT_BRACE, "Expect '{' before class body.");
+
+        List<Stmt.Function> methods = new ArrayList<>();
+        while (!check(RIGHT_BRACE) && !isAtEnd()) {
+            methods.add(function("method")); // CORREÇÃO AQUI: Chamar function("method")
+        }
+
+        consume(RIGHT_BRACE, "Expect '}' after class body.");
+        return new Stmt.Class(name, superclass, methods);
     }
 
     // Regra para declaração de variável (var name = initializer;)
@@ -60,6 +85,24 @@ public class Parser {
 
         consume(SEMICOLON, "Expect ';' after variable declaration.");
         return new Stmt.Var(name, initializer);
+    }
+
+    // Regra para uma instrução (statement)
+    private Stmt statement() {
+        if (match(PRINT))
+            return printStatement();
+        if (match(RETURN))
+            return returnStatement();
+        if (match(LEFT_BRACE))
+            return new Stmt.Block(block());
+        if (match(IF))
+            return ifStatement();
+        if (match(WHILE))
+            return whileStatement(); // NOVO
+        if (match(FOR))
+            return forStatement(); // NOVO
+
+        return expressionStatement();
     }
 
     // Regra para a declaração 'print'
@@ -95,6 +138,62 @@ public class Parser {
         return new Stmt.If(condition, thenBranch, elseBranch);
     }
 
+    // Regra para while statement (Cap. 9 - Loops)
+    private Stmt whileStatement() {
+        consume(LEFT_PAREN, "Expect '(' after 'while'.");
+        Expr condition = expression();
+        consume(RIGHT_PAREN, "Expect ')' after while condition.");
+        Stmt body = statement();
+        return new Stmt.While(condition, body);
+    }
+
+    // Regra para for statement (Cap. 9 - Loops)
+    private Stmt forStatement() {
+        consume(LEFT_PAREN, "Expect '(' after 'for'.");
+
+        Stmt initializer;
+        if (match(SEMICOLON)) { // for (; ...
+            initializer = null;
+        } else if (match(VAR)) { // for (var ...
+            initializer = varDeclaration();
+        } else { // for (expr ...
+            initializer = expressionStatement();
+        }
+
+        Expr condition = null;
+        if (!check(SEMICOLON)) { // for (... ; expr ...
+            condition = expression();
+        }
+        consume(SEMICOLON, "Expect ';' after loop condition.");
+
+        Expr increment = null;
+        if (!check(RIGHT_PAREN)) { // for (... ; ... ; expr)
+            increment = expression();
+        }
+        consume(RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        Stmt body = statement();
+
+        // Desdobramento do for em while loops:
+        // for (init; cond; incr) body;
+        // { init; while (cond) { body; incr; } }
+        if (increment != null) {
+            body = new Stmt.Block(
+                    Arrays.asList(body, new Stmt.Expression(increment)));
+        }
+
+        if (condition == null)
+            condition = new Expr.Literal(true); // Loop infinito se não houver condição
+        body = new Stmt.While(condition, body);
+
+        if (initializer != null) {
+            body = new Stmt.Block(
+                    Arrays.asList(initializer, body));
+        }
+
+        return body;
+    }
+
     // Regra para blocos de código ({ ... })
     private List<Stmt> block() {
         List<Stmt> statements = new ArrayList<>();
@@ -107,22 +206,16 @@ public class Parser {
         return statements;
     }
 
-    // Regra para uma instrução (statement)
-    private Stmt statement() {
-        if (match(PRINT))
-            return printStatement();
-        if (match(RETURN))
-            return returnStatement();
-        if (match(LEFT_BRACE))
-            return new Stmt.Block(block());
-        if (match(IF))
-            return ifStatement();
-
-        return expressionStatement(); // expresssion statement
+    // Regra para uma expressão seguida de ponto e vírgula (e.g., '1 + 2;')
+    private Stmt expressionStatement() {
+        Expr expr = expression();
+        consume(SEMICOLON, "Expect ';' after expression.");
+        return new Stmt.Expression(expr);
     }
 
-    // Regra para declarações de função (fun name(params) { body })
-    // 'kind' pode ser "function" ou "method" (para uso futuro com classes)
+    // Regra para declarações de função (fun name(params) { body }) ou métodos de
+    // classe
+    // 'kind' pode ser "function" ou "method"
     private Stmt.Function function(String kind) {
         Token name = consume(IDENTIFIER, "Expect " + kind + " name.");
 
@@ -141,13 +234,6 @@ public class Parser {
         consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
         List<Stmt> body = block(); // O corpo da função é um bloco de statements
         return new Stmt.Function(name, parameters, body);
-    }
-
-    // Regra para uma expressão seguida de ponto e vírgula (e.g., '1 + 2;')
-    private Stmt expressionStatement() {
-        Expr expr = expression();
-        consume(SEMICOLON, "Expect ';' after expression.");
-        return new Stmt.Expression(expr);
     }
 
     // Regra para uma expressão (nível mais alto na precedência)
@@ -311,8 +397,8 @@ public class Parser {
         }
 
         if (match(THIS))
-            return new Expr.This(previous()); // 'this' keyword (futuro)
-        if (match(SUPER)) { // 'super' keyword (futuro)
+            return new Expr.This(previous()); // 'this' keyword
+        if (match(SUPER)) { // 'super' keyword
             Token keyword = previous();
             consume(DOT, "Expect '.' after 'super'.");
             Token method = consume(IDENTIFIER, "Expect superclass method name.");
